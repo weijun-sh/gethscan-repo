@@ -9,7 +9,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/anyswap/CrossChain-Bridge/common"
 	"github.com/anyswap/CrossChain-Bridge/log"
-	"github.com/weijun-sh/gethscan/token"
 )
 
 // swap tx types
@@ -54,13 +53,14 @@ type ScanConfig struct {
 type TokenConfig struct {
 	// common
 	TxType         string
-	SwapServer     string
+	//SwapServer     string
 	CallByContract string   `toml:",omitempty" json:",omitempty"`
 	Whitelist      []string `toml:",omitempty" json:",omitempty"`
 
 	// bridge
 	PairID         string `toml:",omitempty" json:",omitempty"`
 	TokenAddress   string `toml:",omitempty" json:",omitempty"`
+	Decimal        uint64
 	DepositAddress string `toml:",omitempty" json:",omitempty"`
 
 	// router
@@ -143,26 +143,16 @@ func (c *ScanConfig) CheckConfig() (err error) {
 	}
 	pairIDMap := make(map[string]struct{})
 	tokensMap := make(map[string]struct{})
-	routerswapMap := make(map[string]struct{})
 	exist := false
 	for _, tokenCfg := range c.Tokens {
-		decimal, _ := token.GetErc20Decimal(c.client, tokenCfg.TokenAddress)
-		fmt.Printf("tolen: %v decimal: %v\n", tokenCfg.TokenAddress, decimal)
 		err = tokenCfg.CheckConfig()
 		if err != nil {
 			return err
 		}
-		if tokenCfg.IsRouterSwap() {
-			rkey := strings.ToLower(fmt.Sprintf("%v:%v:%v", tokenCfg.ChainID, tokenCfg.RouterContract, tokenCfg.SwapServer))
-			if _, exist = routerswapMap[rkey]; exist {
-				return errors.New("duplicate router swap config " + tokenCfg.RouterContract)
-			}
-			continue
-		}
 		if tokenCfg.CallByContract != "" {
 			continue
 		}
-		pairIDKey := strings.ToLower(fmt.Sprintf("%v:%v:%v:%v", tokenCfg.TokenAddress, tokenCfg.PairID, tokenCfg.TxType, tokenCfg.SwapServer))
+		pairIDKey := strings.ToLower(fmt.Sprintf("%v:%v:%v", tokenCfg.TokenAddress, tokenCfg.PairID, tokenCfg.TxType))
 		if _, exist = pairIDMap[pairIDKey]; exist {
 			return errors.New("duplicate pairID config " + pairIDKey)
 		}
@@ -227,9 +217,6 @@ func (c *TokenConfig) IsRouterNFTSwap() bool {
 func (c *TokenConfig) CheckConfig() error {
 	if !c.IsValidSwapType() {
 		return errors.New("invalid 'TxType' " + c.TxType)
-	}
-	if c.SwapServer == "" {
-		return errors.New("empty 'SwapServer'")
 	}
 	if c.CallByContract != "" && !common.IsHexAddress(c.CallByContract) {
 		return errors.New("wrong 'CallByContract' " + c.CallByContract)

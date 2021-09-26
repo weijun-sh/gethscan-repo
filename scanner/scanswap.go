@@ -16,13 +16,17 @@ import (
 	"github.com/anyswap/CrossChain-Bridge/tokens"
 	"github.com/urfave/cli/v2"
 
-	ethclient "github.com/jowenshaw/gethclient"
-	"github.com/jowenshaw/gethclient/common"
-	"github.com/jowenshaw/gethclient/types"
+	//ethclient "github.com/jowenshaw/gethclient"
+	"github.com/ethereum/go-ethereum/ethclient"
+	com "github.com/jowenshaw/gethclient/common"
+	"github.com/ethereum/go-ethereum/common"
+	//"github.com/jowenshaw/gethclient/types"
+	"github.com/ethereum/go-ethereum/core/types"
 
-	"github.com/weijun-sh/gethscan/params"
-	"github.com/weijun-sh/gethscan/tools"
-	"github.com/weijun-sh/gethscan/mongodb"
+	"github.com/weijun-sh/gethscan-repo/params"
+	"github.com/weijun-sh/gethscan-repo/tools"
+	"github.com/weijun-sh/gethscan-repo/mongodb"
+	"github.com/weijun-sh/gethscan-repo/token"
 )
 
 var (
@@ -178,8 +182,17 @@ func scanSwap(ctx *cli.Context) error {
        }
 
 	scanner.initClient()
+	scanner.initDecimal()
 	scanner.run()
 	return nil
+}
+
+func (scanner *ethSwapScanner) initDecimal() {
+	c := params.GetScanConfig()
+	for _, tokenCfg := range c.Tokens {
+		decimal, _ := token.GetErc20Decimal(scanner.client, tokenCfg.TokenAddress)
+		fmt.Printf("tolen: %v decimal: %v\n", tokenCfg.TokenAddress, decimal)
+	}
 }
 
 func (scanner *ethSwapScanner) initClient() {
@@ -445,6 +458,7 @@ func (scanner *ethSwapScanner) verifyTransaction(tx *types.Transaction, tokenCfg
 	}
 
 	if verifyErr == nil {
+		return nil//TODO
 		scanner.postBridgeSwap(txHash, tokenCfg)
 	}
 	return verifyErr
@@ -465,7 +479,6 @@ func (scanner *ethSwapScanner) postBridgeSwap(txid string, tokenCfg *params.Toke
 		txid:       txid,
 		pairID:     pairID,
 		rpcMethod:  rpcMethod,
-		swapServer: tokenCfg.SwapServer,
 	}
 	scanner.postSwapPost(swap)
 }
@@ -482,7 +495,6 @@ func (scanner *ethSwapScanner) postRouterSwap(txid string, logIndex int, tokenCf
 		chainID:    chainID,
 		logIndex:   fmt.Sprintf("%d", logIndex),
 		rpcMethod:  rpcMethod,
-		swapServer: tokenCfg.SwapServer,
 	}
 	scanner.postSwapPost(swap)
 }
@@ -528,7 +540,6 @@ func addMongodbSwapPost(swap *swapPost) {
                Txid:       swap.txid,
                PairID:     swap.pairID,
                RpcMethod:  swap.rpcMethod,
-               SwapServer: swap.swapServer,
                Chain:      chain,
                Timestamp:  uint64(time.Now().Unix()),
        }
@@ -541,7 +552,6 @@ func addMongodbSwapPendingPost(swap *swapPost) {
                Txid:       swap.txid,
                PairID:     swap.pairID,
                RpcMethod:  swap.rpcMethod,
-               SwapServer: swap.swapServer,
                Chain:      chain,
                Timestamp:  uint64(time.Now().Unix()),
        }
@@ -731,9 +741,9 @@ func (scanner *ethSwapScanner) parseErc20SwapinTxInput(input []byte, depositAddr
 	funcHash := input[:4]
 	switch {
 	case bytes.Equal(funcHash, transferFuncHash):
-		receiver = common.BytesToAddress(common.GetData(input, 4, 32)).Hex()
+		receiver = common.BytesToAddress(com.GetData(input, 4, 32)).Hex()
 	case bytes.Equal(funcHash, transferFromFuncHash):
-		receiver = common.BytesToAddress(common.GetData(input, 36, 32)).Hex()
+		receiver = common.BytesToAddress(com.GetData(input, 36, 32)).Hex()
 	default:
 		return tokens.ErrTxFuncHashMismatch
 	}
@@ -773,14 +783,16 @@ func (scanner *ethSwapScanner) parseErc20SwapinTxLogs(tx *types.Transaction, log
 		value := string(rlog.Data)
 		if half == swap_2half {// second half
 			if strings.EqualFold(from, depositAddress) {
-				swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "mint")
-				chainSwap <- swapStruct
+				//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "mint")
+				fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "mint")
+				//chainSwap <- swapStruct
 				return nil
 			}
 		} else {
 			if strings.EqualFold(receiver, depositAddress) {
-				swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
-				chainSwap <- swapStruct
+				//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
+				fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
+				//chainSwap <- swapStruct
 				return nil
 			}
 		}
@@ -897,7 +909,6 @@ func (scanner *ethSwapScanner) loopSwapPending() {
                        sp.txid = swap.Txid
                        sp.pairID = swap.PairID
                        sp.rpcMethod = swap.RpcMethod
-                       sp.swapServer = swap.SwapServer
                        ok := scanner.repostSwap(&sp)
                        if ok == true {
                                mongodb.UpdateSwapPending(swap)

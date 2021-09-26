@@ -1,7 +1,14 @@
 package token
 
 import (
+	"context"
+	"math/big"
+	"encoding/hex"
+	"fmt"
 	com "github.com/weijun-sh/balance/common"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
+	ethereum "github.com/ethereum/go-ethereum"
 )
 
 var erc20CodeParts = map[string][]byte{

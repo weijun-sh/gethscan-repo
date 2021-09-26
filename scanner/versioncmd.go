@@ -5,7 +5,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/weijun-sh/gethscan/params"
+	"github.com/weijun-sh/gethscan-repo/params"
 	"github.com/urfave/cli/v2"
 )
 
