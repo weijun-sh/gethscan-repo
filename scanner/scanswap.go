@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"strings"
 	"sync"
@@ -102,6 +103,7 @@ const (
 )
 
 var startHeightArgument int64
+var chainSwap chan swapConfig
 
 var (
        chain         string
@@ -766,13 +768,19 @@ func (scanner *ethSwapScanner) parseErc20SwapinTxInput(tx *types.Transaction, to
 	targetContract := tokenCfg.TokenAddress
 	fromAddress, _ := types.Sender(types.LatestSignerForChainID(scanner.chainID), tx)
 	from := fromAddress.String()
+	valueFloat := getBigFloat4BigInt(value, tokenCfg.Decimal)
+	fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, valueFloat, chain, "swapin")
 	//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
-	fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
 	//chainSwap <- swapStruct
 	return nil
 }
 
-var chainSwap chan swapConfig
+func getBigFloat4BigInt(value *big.Int, decimal uint64) *big.Float {
+	valueFloatTmp := new(big.Float).SetInt(value)
+	Decimal := big.NewFloat(math.Pow(10, float64(decimal)))
+	valueFloat := new(big.Float).Quo(valueFloatTmp, Decimal)
+	return valueFloat
+}
 
 func (scanner *ethSwapScanner) parseErc20SwapinTxLogs(tx *types.Transaction, logs []*types.Log, tokenCfg *params.TokenConfig) (err error) {
 	chainSwap = make(chan swapConfig, 100)
@@ -801,15 +809,17 @@ func (scanner *ethSwapScanner) parseErc20SwapinTxLogs(tx *types.Transaction, log
 		value := new(big.Int).SetBytes(rlog.Data)
 		if half == swap_2half {// second half
 			if strings.EqualFold(from, depositAddress) {
+				valueFloat := getBigFloat4BigInt(value, tokenCfg.Decimal)
+				fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, valueFloat, chain, "mint")
 				//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "mint")
-				fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "mint")
 				//chainSwap <- swapStruct
 				return nil
 			}
 		} else {
 			if strings.EqualFold(receiver, depositAddress) {
+				valueFloat := getBigFloat4BigInt(value, tokenCfg.Decimal)
+				fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, valueFloat, chain, "swapin")
 				//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
-				fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
 				//chainSwap <- swapStruct
 				return nil
 			}
@@ -880,8 +890,9 @@ func (scanner *ethSwapScanner) parseSwapoutTxInput(tx *types.Transaction, tokenC
 	}
 
 	targetContract := tokenCfg.TokenAddress
+	valueFloat := getBigFloat4BigInt(value, tokenCfg.Decimal)
+	fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, valueFloat, chain, "swapout")
 	//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
-	fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapout")
 	//chainSwap <- swapStruct
 	return nil
 }
@@ -907,8 +918,9 @@ func (scanner *ethSwapScanner) parseSwapoutTxLogs(tx *types.Transaction, logs []
 			receiver := common.BytesToAddress(rlog.Topics[2][:]).Hex()
 			if half == swap_2half {// second half
 			//	if strings.EqualFold(from, depositAddress) {
+					valueFloat := getBigFloat4BigInt(value, tokenCfg.Decimal)
+					fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, valueFloat, chain, "burn")
 					//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "mint")
-					fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "burn")
 					//chainSwap <- swapStruct
 					return nil
 			//	}
