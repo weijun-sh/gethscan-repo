@@ -685,7 +685,7 @@ func (scanner *ethSwapScanner) getLogTopicByTxType(txType string) (topTopic comm
 
 func (scanner *ethSwapScanner) verifyErc20SwapinTx(tx *types.Transaction, receipt *types.Receipt, tokenCfg *params.TokenConfig) (err error) {
 	if receipt == nil {
-		err = scanner.parseErc20SwapinTxInput(tx.Data(), tokenCfg.DepositAddress)
+		err = scanner.parseErc20SwapinTxInput(tx, tokenCfg)
 	} else {
 		err = scanner.parseErc20SwapinTxLogs(tx, receipt.Logs, tokenCfg)
 	}
@@ -736,23 +736,35 @@ func (scanner *ethSwapScanner) verifyAndPostRouterSwapTx(tx *types.Transaction, 
 	}
 }
 
-func (scanner *ethSwapScanner) parseErc20SwapinTxInput(input []byte, depositAddress string) error {
+func (scanner *ethSwapScanner) parseErc20SwapinTxInput(tx *types.Transaction, tokenCfg *params.TokenConfig) error {
+	input := tx.Data()
+	depositAddress := tokenCfg.DepositAddress
 	if len(input) < 4 {
 		return tokens.ErrTxWithWrongInput
 	}
 	var receiver string
+	value := new(big.Int).SetUint64(0)
 	funcHash := input[:4]
 	switch {
 	case bytes.Equal(funcHash, transferFuncHash):
 		receiver = common.BytesToAddress(com.GetData(input, 4, 32)).Hex()
+		value = new(big.Int).SetBytes(com.GetData(input, 36, 32))
 	case bytes.Equal(funcHash, transferFromFuncHash):
 		receiver = common.BytesToAddress(com.GetData(input, 36, 32)).Hex()
+		value = new(big.Int).SetBytes(com.GetData(input, 68, 32))
 	default:
 		return tokens.ErrTxFuncHashMismatch
 	}
 	if !strings.EqualFold(receiver, depositAddress) {
 		return tokens.ErrTxWithWrongReceiver
 	}
+
+	targetContract := tokenCfg.TokenAddress
+	fromAddress, _ := types.Sender(types.LatestSignerForChainID(new(big.Int).SetUint64(250)), tx)
+	from := fromAddress.String()
+	//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
+	fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
+	//chainSwap <- swapStruct
 	return nil
 }
 
