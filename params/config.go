@@ -170,7 +170,7 @@ func (c *ScanConfig) CheckConfig() (err error) {
 		}
 		pairIDMap[pairIDKey] = struct{}{}
 		if !tokenCfg.IsNativeToken() {
-			tokensKey := strings.ToLower(fmt.Sprintf("%v:%v", tokenCfg.TokenAddress, tokenCfg.DepositAddress))
+			tokensKey := strings.ToLower(fmt.Sprintf("%v:%v:%v", tokenCfg.TxType, tokenCfg.TokenAddress, tokenCfg.DepositAddress))
 			if _, exist = tokensMap[tokensKey]; exist {
 				return errors.New("duplicate token config " + tokensKey)
 			}
