@@ -15,7 +15,7 @@ type MgoSwap struct {
 	Txid       string `bson:"txid"`
 	PairID     string `bson:"pairID"`    //"FXSv4"
 	RpcMethod  string `bson:"rpcMethod"` //"swap.Swapin"
-	SwapServer string `bson:"swapServer"`
+	//SwapServer string `bson:"swapServer"`
 	Chain      string `bson:"chain"`
 	Timestamp  uint64 `bson:"timestamp"`
 }

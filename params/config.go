@@ -175,6 +175,9 @@ func (c *TokenConfig) IsValidSwapType() bool {
 		TxSwapin,
 		TxSwapout,
 		TxSwapout2,
+		TxSwapin_2,
+		TxSwapout_2,
+		TxSwapout2_2,
 		TxRouterERC20Swap,
 		TxRouterNFTSwap:
 		return true
@@ -187,6 +190,16 @@ func (c *TokenConfig) IsValidSwapType() bool {
 func (c *TokenConfig) IsBridgeSwap() bool {
 	switch c.TxType {
 	case TxSwapin, TxSwapout, TxSwapout2:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsBridgeSwap_2 is bridge swap
+func (c *TokenConfig) IsBridgeSwap_2() bool {
+	switch c.TxType {
+	case TxSwapin_2, TxSwapout, TxSwapout2:
 		return true
 	default:
 		return false

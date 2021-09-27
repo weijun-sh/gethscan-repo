@@ -385,6 +385,9 @@ func (scanner *ethSwapScanner) checkTxToAddress(tx *types.Transaction, tokenCfg 
 		needReceipt = true
 	} else if tokenCfg.IsNativeToken() {
 		cmpTxTo = tokenCfg.DepositAddress
+	} else if tokenCfg.IsBridgeSwap_2() {
+		cmpTxTo = tokenCfg.TokenAddress
+		needReceipt = true
 	} else {
 		cmpTxTo = tokenCfg.TokenAddress
 		if tokenCfg.CallByContract != "" {
@@ -780,7 +783,7 @@ func (scanner *ethSwapScanner) parseErc20SwapinTxLogs(tx *types.Transaction, log
 		}
 		transferLogExist = true
 		receiver := common.BytesToAddress(rlog.Topics[2][:]).Hex()
-		value := string(rlog.Data)
+		value := new(big.Int).SetBytes(rlog.Data)
 		if half == swap_2half {// second half
 			if strings.EqualFold(from, depositAddress) {
 				//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "mint")

@@ -121,7 +121,7 @@ func deepCopy(swap *MgoSwap) *MgoSwap {
 	sp.Txid = swap.Txid
 	sp.PairID = swap.PairID
 	sp.RpcMethod = swap.RpcMethod
-	sp.SwapServer = swap.SwapServer
+	//sp.SwapServer = swap.SwapServer
 	sp.Chain = swap.Chain
 	sp.Timestamp = swap.Timestamp
 	return &sp
