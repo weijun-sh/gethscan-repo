@@ -27,10 +27,12 @@ var (
 	configFile string
 	scanConfig = &ScanConfig{}
 	mongodbConfig = &MongoDBConfig{}
+	chainConfig = &ChainConfig{}
 )
 
 type Config struct {
        MongoDB *MongoDBConfig
+	Chain *ChainConfig
        Tokens  []*TokenConfig
 }
 
@@ -41,7 +43,11 @@ type MongoDBConfig struct {
        UserName   string `json:"-"`
        Password   string `json:"-"`
        Enable     bool
+}
+
+type ChainConfig struct {
        BlockChain string
+	ChainID string
 }
 
 // ScanConfig scan config
@@ -71,6 +77,11 @@ type TokenConfig struct {
 // GetMongodbConfig get mongodb config
 func GetMongodbConfig() *MongoDBConfig {
        return mongodbConfig
+}
+
+// GetChainConfig get chain config
+func GetChainConfig() *ChainConfig {
+       return chainConfig
 }
 
 // IsNativeToken is native token
@@ -104,6 +115,7 @@ func LoadConfig(filePath string) *ScanConfig {
 	log.Println("LoadConfig finished.", string(bs))
 
        mongodbConfig = config.MongoDB
+	chainConfig = config.Chain
        scanConfig.Tokens = config.Tokens
 
        if err := scanConfig.CheckConfig(); err != nil {
@@ -199,7 +211,17 @@ func (c *TokenConfig) IsBridgeSwap() bool {
 // IsBridgeSwap_2 is bridge swap
 func (c *TokenConfig) IsBridgeSwap_2() bool {
 	switch c.TxType {
-	case TxSwapin_2, TxSwapout, TxSwapout2:
+	case TxSwapin_2, TxSwapout_2:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsBridgeSwapIn is bridge swap
+func (c *TokenConfig) IsBridgeSwapin() bool {
+	switch c.TxType {
+	case TxSwapin_2, TxSwapin:
 		return true
 	default:
 		return false

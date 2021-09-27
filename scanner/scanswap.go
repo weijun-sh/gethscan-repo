@@ -174,12 +174,14 @@ func scanSwap(ctx *cli.Context) error {
 
        //mongo
        dbConfig := params.GetMongodbConfig()
-       chain = dbConfig.BlockChain
        mongodbEnable = dbConfig.Enable
        if mongodbEnable {
                InitMongodb()
                go scanner.loopSwapPending()
        }
+
+       chConfig := params.GetChainConfig()
+       chain = chConfig.BlockChain
 
 	scanner.initClient()
 	scanner.initDecimal()
@@ -439,7 +441,7 @@ func (scanner *ethSwapScanner) verifyTransaction(tx *types.Transaction, tokenCfg
 		return nil
 
 	// bridge swapin
-	case tokenCfg.DepositAddress != "":
+	case tokenCfg.IsBridgeSwapin():
 		if tokenCfg.IsNativeToken() {
 			scanner.postBridgeSwap(txHash, tokenCfg)
 			return nil
@@ -454,7 +456,7 @@ func (scanner *ethSwapScanner) verifyTransaction(tx *types.Transaction, tokenCfg
 	// bridge swapout
 	default:
 		if scanner.scanReceipt {
-			verifyErr = scanner.parseSwapoutTxLogs(receipt.Logs, tokenCfg)
+			verifyErr = scanner.parseSwapoutTxLogs(tx, receipt.Logs, tokenCfg)
 		} else {
 			verifyErr = scanner.verifySwapoutTx(tx, receipt, tokenCfg)
 		}
@@ -655,6 +657,8 @@ func (scanner *ethSwapScanner) getSwapoutFuncHashByTxType(txType string) []byte 
 	switch strings.ToLower(txType) {
 	case params.TxSwapout:
 		return addressSwapoutFuncHash
+	case params.TxSwapout_2:
+		return transferFuncHash
 	case params.TxSwapout2:
 		return stringSwapoutFuncHash
 	default:
@@ -674,7 +678,7 @@ func (scanner *ethSwapScanner) getLogTopicByTxType(txType string) (topTopic comm
 	case params.TxSwapin_2:
 		return transferLogTopic_2, 3, swap_2half
 	case params.TxSwapout_2:
-		return addressSwapoutLogTopic_2, 3, swap_2half
+		return transferLogTopic, 3, swap_2half
 	case params.TxSwapout2_2:
 		return stringSwapoutLogTopic_2, 2, swap_2half
 	default:
@@ -694,9 +698,9 @@ func (scanner *ethSwapScanner) verifyErc20SwapinTx(tx *types.Transaction, receip
 
 func (scanner *ethSwapScanner) verifySwapoutTx(tx *types.Transaction, receipt *types.Receipt, tokenCfg *params.TokenConfig) (err error) {
 	if receipt == nil {
-		err = scanner.parseSwapoutTxInput(tx.Data(), tokenCfg.TxType)
+		err = scanner.parseSwapoutTxInput(tx, tokenCfg)
 	} else {
-		err = scanner.parseSwapoutTxLogs(receipt.Logs, tokenCfg)
+		err = scanner.parseSwapoutTxLogs(tx, receipt.Logs, tokenCfg)
 	}
 	return err
 }
@@ -760,7 +764,7 @@ func (scanner *ethSwapScanner) parseErc20SwapinTxInput(tx *types.Transaction, to
 	}
 
 	targetContract := tokenCfg.TokenAddress
-	fromAddress, _ := types.Sender(types.LatestSignerForChainID(new(big.Int).SetUint64(250)), tx)
+	fromAddress, _ := types.Sender(types.LatestSignerForChainID(scanner.chainID), tx)
 	from := fromAddress.String()
 	//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
 	fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
@@ -775,9 +779,8 @@ func (scanner *ethSwapScanner) parseErc20SwapinTxLogs(tx *types.Transaction, log
 	targetContract := tokenCfg.TokenAddress
 	depositAddress := tokenCfg.DepositAddress
 	cmpLogTopic, topicsLen, half := scanner.getLogTopicByTxType(tokenCfg.TxType)
-	fromAddress, _ := types.Sender(types.LatestSignerForChainID(new(big.Int).SetUint64(250)), tx)
+	fromAddress, _ := types.Sender(types.LatestSignerForChainID(scanner.chainID), tx)
 	from := fromAddress.String()
-	//fmt.Printf("from: %v\n", from)
 
 	transferLogExist := false
 	for _, rlog := range logs {
@@ -844,20 +847,50 @@ func mergeStruct(txHash, pairID, contract, from, to, value, chain, swaptype stri
 		}
 }
 
-func (scanner *ethSwapScanner) parseSwapoutTxInput(input []byte, txType string) error {
+func (scanner *ethSwapScanner) parseSwapoutTxInput(tx *types.Transaction, tokenCfg *params.TokenConfig) error {
+	//txType := tokenCfg.TxType
+	input := tx.Data()
 	if len(input) < 4 {
 		return tokens.ErrTxWithWrongInput
 	}
+	//funcHash := input[:4]
+	//if bytes.Equal(funcHash, scanner.getSwapoutFuncHashByTxType(txType)) {
+	//	return nil
+	//}
+	//return tokens.ErrTxFuncHashMismatch
+	depositAddress := tokenCfg.DepositAddress
+	fromAddress, _ := types.Sender(types.LatestSignerForChainID(scanner.chainID), tx)
+	from := fromAddress.String()
+
+	var receiver string
+	value := new(big.Int).SetUint64(0)
 	funcHash := input[:4]
-	if bytes.Equal(funcHash, scanner.getSwapoutFuncHashByTxType(txType)) {
-		return nil
+	switch {
+	case bytes.Equal(funcHash, transferFuncHash):
+		receiver = common.BytesToAddress(com.GetData(input, 4, 32)).Hex()
+		value = new(big.Int).SetBytes(com.GetData(input, 36, 32))
+	case bytes.Equal(funcHash, transferFromFuncHash):
+		receiver = common.BytesToAddress(com.GetData(input, 36, 32)).Hex()
+		value = new(big.Int).SetBytes(com.GetData(input, 68, 32))
+	default:
+		return tokens.ErrTxFuncHashMismatch
 	}
-	return tokens.ErrTxFuncHashMismatch
+	if !strings.EqualFold(from, depositAddress) {
+		return tokens.ErrTxWithWrongReceiver
+	}
+
+	targetContract := tokenCfg.TokenAddress
+	//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapin")
+	fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapout")
+	//chainSwap <- swapStruct
+	return nil
 }
 
-func (scanner *ethSwapScanner) parseSwapoutTxLogs(logs []*types.Log, tokenCfg *params.TokenConfig) (err error) {
+func (scanner *ethSwapScanner) parseSwapoutTxLogs(tx *types.Transaction, logs []*types.Log, tokenCfg *params.TokenConfig) (err error) {
 	targetContract := tokenCfg.TokenAddress
 	cmpLogTopic, topicsLen, _ := scanner.getLogTopicByTxType(tokenCfg.TxType)
+	fromAddress, _ := types.Sender(types.LatestSignerForChainID(scanner.chainID), tx)
+	from := fromAddress.String()
 
 	for _, rlog := range logs {
 		if rlog.Removed {
@@ -870,7 +903,17 @@ func (scanner *ethSwapScanner) parseSwapoutTxLogs(logs []*types.Log, tokenCfg *p
 			continue
 		}
 		if rlog.Topics[0] == cmpLogTopic {
-			return nil
+			value := new(big.Int).SetBytes(rlog.Data)
+			receiver := common.BytesToAddress(rlog.Topics[2][:]).Hex()
+			//if half == swap_2half {// second half
+			//	if strings.EqualFold(from, depositAddress) {
+					//swapStruct := mergeStruct(tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "mint")
+					fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, value, chain, "swapout")
+					//chainSwap <- swapStruct
+					return nil
+			//	}
+			//}
+			//return nil
 		}
 	}
 	return tokens.ErrSwapoutLogNotFound
