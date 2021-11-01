@@ -1,0 +1,28 @@
+# config
+[MongoDB]
+DBURL = "172.26.142.156:27037"
+DBName = "bridge-repo"
+UserName = "bridge"
+Password = "br!dge_2021092715"
+Enable = false
+
+[Chain]
+BlockChain = "eth"
+
+# swapin: eth -> ftm
+[[Tokens]]
+# eth: in
+TxType = "swapin"
+PairID = "ETH2FTM-USDCoin"
+TokenAddress = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+DepositAddress = "0xC564EE9f21Ed8A2d8E7e76c085740d5e4c5FaFbE"
+Decimals=6
+
+[[Tokens]]
+# eth: out
+TxType = "swapout"
+PairID = "ETH2FTM-USDCoin"
+TokenAddress = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+DepositAddress = "0xC564EE9f21Ed8A2d8E7e76c085740d5e4c5FaFbE"
+Decimals=6
+
