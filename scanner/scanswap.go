@@ -187,7 +187,7 @@ func scanSwap(ctx *cli.Context) error {
        chain = chConfig.BlockChain
 
 	scanner.initClient()
-	scanner.initDecimal()
+	//scanner.initDecimal()
 	scanner.run()
 	return nil
 }
@@ -429,8 +429,33 @@ func (scanner *ethSwapScanner) checkTxToAddress(tx *types.Transaction, tokenCfg 
 	return receipt, true
 }
 
+// IsNativeToken
+func (scanner *ethSwapScanner) checkTxFromAddress(tx *types.Transaction, tokenCfg *params.TokenConfig) (receipt *types.Receipt, isAcceptFromAddr bool) {
+	fromAddress, _ := types.Sender(types.LatestSignerForChainID(scanner.chainID), tx)
+	txfromAddress := fromAddress.String()
+
+	var cmpTxFrom string
+	cmpTxFrom = tokenCfg.DepositAddress
+
+	if strings.EqualFold(txfromAddress, cmpTxFrom) {
+		isAcceptFromAddr = true
+	}
+
+	if !isAcceptFromAddr {
+		return nil, false
+	}
+
+	return receipt, true
+}
+
 func (scanner *ethSwapScanner) verifyTransaction(tx *types.Transaction, tokenCfg *params.TokenConfig, ts uint64) (verifyErr error) {
-	receipt, isAcceptToAddr := scanner.checkTxToAddress(tx, tokenCfg)
+	var receipt *types.Receipt
+	var isAcceptToAddr bool
+	if !tokenCfg.IsBridgeSwapin() && tokenCfg.IsNativeToken() {
+		receipt, isAcceptToAddr = scanner.checkTxFromAddress(tx, tokenCfg)
+	} else {
+		receipt, isAcceptToAddr = scanner.checkTxToAddress(tx, tokenCfg)
+	}
 	if !isAcceptToAddr {
 		return nil
 	}
@@ -446,6 +471,8 @@ func (scanner *ethSwapScanner) verifyTransaction(tx *types.Transaction, tokenCfg
 	// bridge swapin
 	case tokenCfg.IsBridgeSwapin():
 		if tokenCfg.IsNativeToken() {
+			scanner.printNativeInfo(tx, tokenCfg, ts, "swapin")
+			return nil
 			scanner.postBridgeSwap(txHash, tokenCfg)
 			return nil
 		}
@@ -458,6 +485,10 @@ func (scanner *ethSwapScanner) verifyTransaction(tx *types.Transaction, tokenCfg
 
 	// bridge swapout
 	default:
+		if tokenCfg.IsNativeToken() {
+			scanner.printNativeInfo(tx, tokenCfg, ts, "swapout")
+			return nil
+		}
 		if scanner.scanReceipt {
 			verifyErr = scanner.parseSwapoutTxLogs(tx, receipt.Logs, tokenCfg, ts)
 		} else {
@@ -470,6 +501,16 @@ func (scanner *ethSwapScanner) verifyTransaction(tx *types.Transaction, tokenCfg
 		scanner.postBridgeSwap(txHash, tokenCfg)
 	}
 	return verifyErr
+}
+
+func (scanner *ethSwapScanner) printNativeInfo(tx *types.Transaction, tokenCfg *params.TokenConfig, ts uint64, swapType string) {
+	receiver := tx.To().String()
+	targetContract := tokenCfg.TokenAddress
+	fromAddress, _ := types.Sender(types.LatestSignerForChainID(scanner.chainID), tx)
+	from := fromAddress.String()
+	value := tx.Value()
+	valueFloat := getBigFloat4BigInt(value, tokenCfg.Decimal)
+	fmt.Printf("tx.Hash().Hex(): %v, tokenCfg.PairID: %v, targetContract: %v, from: %v, receiver: %v, value: %v, chain: %v, type: %v, timestamp: %v\n", tx.Hash().Hex(), tokenCfg.PairID, targetContract, from, receiver, valueFloat, chain, swapType, ts)
 }
 
 func (scanner *ethSwapScanner) postBridgeSwap(txid string, tokenCfg *params.TokenConfig) {
